@@ -1,0 +1,19 @@
+[project]
+name = "gtd"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "lark-oapi",
+    "pydantic-settings",
+    "jinja2",
+    "litellm",
+]
+
+[tool.setuptools.packages.find]
+include = ["gtd*"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}下一步行动 - GTD{% endblock %}
+
+{% block content %}
+
+<h1>✅ 下一步行动</h1>
+<p class="sub">共 {{ items|length }} 条</p>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-text">{{ item.title }}</span>
+      {% if item.estimated_minutes %}
+      <span class="time">{{ item.estimated_minutes }}分钟</span>
+      {% endif %}
+    </div>
+    {% if item.context_tag or item.energy_level or item.notes or item.due_at %}
+    <div class="item-sub">
+      {% if item.context_tag %}<span class="tag">{{ item.context_tag }}</span>{% endif %}
+      {% if item.energy_level %}<span class="tag">精力: {{ item.energy_level }}</span>{% endif %}
+      {% if item.due_at %}截止 {{ item.due_at }}{% endif %}
+      {% if item.notes %}<br>{{ item.notes }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">暂无下一步行动。<br>从<a href="/inbox">收集箱</a>整理条目以创建行动。</div>
+{% endif %}
+
+{% endblock %}

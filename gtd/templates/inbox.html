@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block title %}GTD 收集箱{% endblock %}
+
+{% block extra_css %}
+  .toolbar { background: #fff; padding: 16px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .toolbar a { color: #2563eb; font-weight: 600; text-decoration: none; }
+  .toolbar p { color: #666; font-size: 0.85em; margin-top: 4px; }
+  .guide { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.88em; color: #1e40af; }
+  .bm-install { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+  .bm-install strong { color: #92400e; }
+  .bm-install a { display: inline-block; margin-top: 6px; background: #f59e0b; color: #fff; padding: 6px 14px; border-radius: 4px; font-weight: 600; text-decoration: none; cursor: grab; }
+  .capture-form { background: #fff; padding: 16px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .capture-form input[type=text] { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1em; outline: none; }
+  .capture-form input[type=text]:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+  .capture-row { display: flex; gap: 8px; margin-top: 8px; }
+  .capture-row button { padding: 8px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 0.95em; font-weight: 600; cursor: pointer; }
+  .capture-row button:hover { background: #1d4ed8; }
+  .capture-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .capture-feedback { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+
+  .item-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
+  .open-card-btn {
+    font-size: 0.82em; padding: 7px 12px; border: 1px solid #d1d5db; border-radius: 999px;
+    background: #f9fafb; color: #374151; cursor: pointer; font-weight: 600;
+  }
+  .open-card-btn:hover { background: #eef2ff; border-color: #c7d2fe; color: #1d4ed8; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+    display: none; align-items: flex-end; justify-content: center; z-index: 1000;
+    padding: 16px;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal-card {
+    width: 100%; max-width: 640px; background: #fff; border-radius: 16px 16px 12px 12px;
+    padding: 16px; box-shadow: 0 14px 36px rgba(0,0,0,0.2); max-height: 85vh; overflow-y: auto;
+  }
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .modal-title { font-size: 1.05em; font-weight: 700; color: #111827; }
+  .modal-close {
+    border: none; background: #f3f4f6; color: #6b7280; border-radius: 999px;
+    width: 32px; height: 32px; cursor: pointer; font-size: 1.1em;
+  }
+  .modal-close:hover { background: #e5e7eb; }
+  .modal-text {
+    margin-top: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 12px 14px; color: #111827; line-height: 1.55; white-space: pre-wrap;
+  }
+  .modal-meta { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .meta-chip {
+    font-size: 0.75em; padding: 4px 9px; border-radius: 999px; background: #f3f4f6; color: #4b5563;
+  }
+  .modal-section { margin-top: 14px; }
+  .modal-section-title { font-size: 0.88em; color: #6b7280; margin-bottom: 8px; font-weight: 600; }
+  .route-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .route-btn, .clarify-btn, .confirm-btn {
+    border: none; border-radius: 10px; padding: 9px 12px; font-size: 0.86em; cursor: pointer; font-weight: 600;
+  }
+  .route-btn { background: #eef2ff; color: #3730a3; }
+  .route-btn:hover { background: #e0e7ff; }
+  .clarify-btn { width: 100%; background: #2563eb; color: #fff; }
+  .clarify-btn:hover { background: #1d4ed8; }
+  .confirm-btn { margin-top: 10px; width: 100%; background: #059669; color: #fff; }
+  .confirm-btn:hover { background: #047857; }
+  .route-btn:disabled, .clarify-btn:disabled, .confirm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .clarify-result {
+    margin-top: 12px; background: #f8fafc; border: 1px solid #dbeafe; border-radius: 10px; padding: 12px;
+  }
+  .clarify-line { font-size: 0.86em; color: #334155; margin-top: 6px; }
+  .clarify-line strong { color: #0f172a; }
+  .status-message { margin-top: 10px; min-height: 1.2em; font-size: 0.85em; }
+  .status-message.error { color: #dc2626; }
+  .status-message.success { color: #059669; }
+  .status-message.info { color: #2563eb; }
+{% endblock %}
+
+{% block content %}
+
+<h1>📥 GTD 收集箱</h1>
+<p class="sub">共 {{ count }} 条 · 自动刷新每 30 秒</p>
+
+<div class="guide">
+  📌 收集箱仅用于<strong>临时捕获</strong>想法 —— 请定期将条目整理到对应的 GTD 清单中。
+</div>
+
+<div class="capture-form">
+  <form id="capture-form" onsubmit="return capture(event)">
+    <input type="text" id="capture-input" placeholder="输入想收集的内容，按 Enter 提交…" autofocus>
+    <div class="capture-row">
+      <button type="submit" id="capture-btn">➕ 收集</button>
+      <span class="capture-feedback" id="capture-feedback"></span>
+    </div>
+  </form>
+</div>
+
+<div class="bm-install">
+  <strong>📌 安装书签工具：</strong>将下面的按钮拖到浏览器书签栏，点击即可在任何网页快速收集。
+  <br>
+  <a href="javascript:(function(){const%20t=prompt('GTD%20收集:');if(t){fetch('http://127.0.0.1:8420/api/inbox',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,source:'web'})}).then(()=>alert('已收集%20✓')).catch(()=>alert('收集失败%20-%20GTD%20服务是否在运行?'))}})();">
+    ➕ GTD 收集
+  </a>
+</div>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item" id="item-{{ item.id }}" data-item-id="{{ item.id }}" data-raw-text="{{ item.raw_text|e }}" data-source="{{ item.source|e }}" data-created-at="{{ item.created_at|e }}" data-status="{{ item.status|e }}">
+    <div class="item-top">
+      <span class="item-text">{{ item.raw_text }}</span>
+      <div class="meta">
+        <span class="source {{ item.source }}">{{ item.source }}</span>
+        <span class="time">{{ item.created_at }}</span>
+      </div>
+    </div>
+    <div class="item-actions">
+      <button class="open-card-btn" onclick="openActionCard({{ item.id }})">整理 / 澄清</button>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">收集箱是空的。在上方输入框直接收集，或使用飞书、终端、书签工具添加。</div>
+{% endif %}
+
+<div class="modal-backdrop" id="action-card-backdrop" onclick="closeActionCard(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">整理收集箱条目</div>
+        <div class="sub" style="margin: 6px 0 0;">查看当前 inbox 信息，支持智能澄清或手动路由。</div>
+      </div>
+      <button class="modal-close" onclick="closeActionCard()">×</button>
+    </div>
+
+    <div class="modal-text" id="card-item-text"></div>
+    <div class="modal-meta" id="card-item-meta"></div>
+
+    <div class="modal-section">
+      <div class="modal-section-title">智能澄清</div>
+      <button class="clarify-btn" id="clarify-btn" onclick="runClarify()">✨ 智能澄清</button>
+      <div class="clarify-result" id="clarify-result" style="display:none;"></div>
+      <button class="confirm-btn" id="confirm-btn" style="display:none;" onclick="confirmClarifyResult()">按澄清建议执行</button>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-title">手动路由</div>
+      <div class="route-grid" id="route-grid">
+        <button class="route-btn" onclick="routeCurrentItem('next_action')">下一步行动</button>
+        <button class="route-btn" onclick="routeCurrentItem('project')">项目</button>
+        <button class="route-btn" onclick="routeCurrentItem('waiting')">等待</button>
+        <button class="route-btn" onclick="routeCurrentItem('someday')">将来/也许</button>
+        <button class="route-btn" onclick="routeCurrentItem('reference')">参考</button>
+        <button class="route-btn" onclick="routeCurrentItem('done')">完成</button>
+        <button class="route-btn" onclick="routeCurrentItem('trash')">丢弃</button>
+      </div>
+    </div>
+
+    <div class="status-message" id="card-status"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const DEST_LABELS = {
+    next_action: '下一步行动',
+    project: '项目',
+    waiting: '等待',
+    someday: '将来/也许',
+    reference: '参考',
+    done: '完成',
+    trash: '丢弃'
+  };
+
+  const CLARIFY_DEST_MAP = {
+    next_actions: '下一步行动',
+    projects: '项目',
+    waiting_for: '等待',
+    someday_maybe: '将来/也许',
+    reference: '参考',
+    done_log: '完成',
+    trash: '丢弃'
+  };
+
+  let currentItemId = null;
+  let currentClarifyResult = null;
+
+  function capture(event) {
+    event.preventDefault();
+    const input = document.getElementById('capture-input');
+    const btn = document.getElementById('capture-btn');
+    const fb = document.getElementById('capture-feedback');
+    const text = input.value.trim();
+    if (!text) {
+      fb.textContent = '请输入内容';
+      fb.style.color = '#dc2626';
+      return false;
+    }
+    btn.disabled = true;
+    fb.textContent = '收集中…';
+    fb.style.color = '#666';
+    fetch('/api/inbox', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: text, source: 'web'})
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        fb.textContent = '已收集 ✓';
+        fb.style.color = '#059669';
+        input.value = '';
+        setTimeout(() => location.reload(), 600);
+      } else {
+        fb.textContent = data.error || '收集失败';
+        fb.style.color = '#dc2626';
+      }
+    })
+    .catch(() => {
+      fb.textContent = '收集失败 - GTD 服务是否在运行？';
+      fb.style.color = '#dc2626';
+    })
+    .finally(() => { btn.disabled = false; });
+    return false;
+  }
+
+  function openActionCard(itemId) {
+    const item = document.getElementById('item-' + itemId);
+    if (!item) return;
+
+    currentItemId = itemId;
+    currentClarifyResult = null;
+
+    const rawText = item.dataset.rawText || '';
+    const source = item.dataset.source || '';
+    const createdAt = item.dataset.createdAt || '';
+    const status = item.dataset.status || '';
+
+    document.getElementById('card-item-text').textContent = rawText;
+    document.getElementById('card-item-meta').innerHTML = [
+      '<span class="meta-chip">#' + itemId + '</span>',
+      '<span class="meta-chip">来源：' + escapeHtml(source) + '</span>',
+      '<span class="meta-chip">状态：' + escapeHtml(status) + '</span>',
+      '<span class="meta-chip">创建：' + escapeHtml(createdAt) + '</span>'
+    ].join('');
+
+    document.getElementById('clarify-result').style.display = 'none';
+    document.getElementById('clarify-result').innerHTML = '';
+    document.getElementById('confirm-btn').style.display = 'none';
+    document.getElementById('card-status').textContent = '';
+    document.getElementById('card-status').className = 'status-message';
+    setActionButtonsDisabled(false);
+
+    document.getElementById('action-card-backdrop').classList.add('show');
+  }
+
+  function closeActionCard(event) {
+    if (event && event.target && event.target.id !== 'action-card-backdrop') return;
+    document.getElementById('action-card-backdrop').classList.remove('show');
+  }
+
+  function setStatus(message, type='info') {
+    const box = document.getElementById('card-status');
+    box.textContent = message;
+    box.className = 'status-message ' + type;
+  }
+
+  function setActionButtonsDisabled(disabled) {
+    document.getElementById('clarify-btn').disabled = disabled;
+    document.querySelectorAll('#route-grid .route-btn').forEach(btn => btn.disabled = disabled);
+    document.getElementById('confirm-btn').disabled = disabled;
+  }
+
+  function renderClarifyResult(result) {
+    const nextAction = result.next_action || {};
+    const html = [
+      '<div class="clarify-line"><strong>建议清单：</strong>' + escapeHtml(CLARIFY_DEST_MAP[result.destination] || result.destination || '未识别') + '</div>',
+      '<div class="clarify-line"><strong>可执行：</strong>' + (result.is_actionable ? '是' : '否') + '</div>',
+      '<div class="clarify-line"><strong>是否项目：</strong>' + (result.is_project ? '是' : '否') + '</div>',
+      result.reasoning ? '<div class="clarify-line"><strong>判断依据：</strong>' + escapeHtml(result.reasoning) + '</div>' : '',
+      result.clarification_question ? '<div class="clarify-line"><strong>追问：</strong>' + escapeHtml(result.clarification_question) + '</div>' : '',
+      nextAction.title ? '<div class="clarify-line"><strong>建议下一步：</strong>' + escapeHtml(nextAction.title) + '</div>' : '',
+      nextAction.context_tag ? '<div class="clarify-line"><strong>情境：</strong>' + escapeHtml(nextAction.context_tag) + '</div>' : '',
+      nextAction.estimated_minutes ? '<div class="clarify-line"><strong>预计耗时：</strong>' + escapeHtml(String(nextAction.estimated_minutes)) + ' 分钟</div>' : ''
+    ].filter(Boolean).join('');
+
+    const box = document.getElementById('clarify-result');
+    box.innerHTML = html;
+    box.style.display = 'block';
+    document.getElementById('confirm-btn').style.display = 'block';
+  }
+
+  function runClarify() {
+    if (!currentItemId) return;
+    setActionButtonsDisabled(true);
+    setStatus('正在执行智能澄清…', 'info');
+
+    fetch('/api/clarify/' + currentItemId, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) throw new Error(data.error || '澄清失败');
+        currentClarifyResult = data.result;
+        renderClarifyResult(data.result);
+        setStatus('智能澄清完成，可按建议执行或手动路由。', 'success');
+      })
+      .catch(err => {
+        setStatus(err.message || '智能澄清失败', 'error');
+      })
+      .finally(() => setActionButtonsDisabled(false));
+  }
+
+  function confirmClarifyResult() {
+    if (!currentItemId || !currentClarifyResult) return;
+    setActionButtonsDisabled(true);
+    setStatus('正在按澄清建议执行…', 'info');
+
+    fetch('/api/clarify/' + currentItemId + '/confirm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ final_result: currentClarifyResult })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) throw new Error(data.error || '确认执行失败');
+        setStatus('已按澄清建议完成归类 ✓', 'success');
+        removeItemFromList(currentItemId);
+      })
+      .catch(err => {
+        setStatus(err.message || '确认执行失败', 'error');
+        setActionButtonsDisabled(false);
+      });
+  }
+
+  function routeCurrentItem(dest) {
+    if (!currentItemId) return;
+    setActionButtonsDisabled(true);
+    setStatus('正在路由到「' + DEST_LABELS[dest] + '」…', 'info');
+
+    fetch('/api/inbox/' + currentItemId + '/route', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({destination: dest})
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) throw new Error(data.error || '路由失败');
+        setStatus('已路由到「' + DEST_LABELS[dest] + '」 ✓', 'success');
+        removeItemFromList(currentItemId);
+      })
+      .catch(err => {
+        setStatus(err.message || '路由失败', 'error');
+        setActionButtonsDisabled(false);
+      });
+  }
+
+  function removeItemFromList(itemId) {
+    const item = document.getElementById('item-' + itemId);
+    if (item) item.style.opacity = '0';
+    setTimeout(() => {
+      if (item) item.remove();
+      closeActionCard();
+      setTimeout(() => location.reload(), 250);
+    }, 260);
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+  }
+
+  setTimeout(() => location.reload(), 30000);
+</script>
+{% endblock %}

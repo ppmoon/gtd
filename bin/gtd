@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+"""GTD CLI — 不依赖飞书，终端完成全部 GTD 操作。
+
+用法:
+  gtd add <内容>            捕获一条事项到收集箱
+  gtd inbox [--status=]     列出收集箱
+  gtd clarify <id>          澄清某条事项（调用 LLM）
+  gtd confirm <id>          确认澄清结果，写入正式清单
+  gtd recommend [选项]       获取情境推荐
+  gtd integrity             系统完整性检查
+  gtd review start          启动周回顾
+  gtd review step <rid> <k> 完成回顾步骤
+  gtd review summary <rid>  查看回顾摘要
+  gtd projects              列出活跃项目
+  gtd actions                列出待办行动
+  gtd waiting                列出等待事项
+  gtd someday               列出 Someday/Maybe
+
+推荐选项:
+  --context=@电脑           情境标签
+  --minutes=20             可用分钟数
+  --energy=low             精力水平 (low/medium/high)
+
+示例:
+  gtd add 明天早上9点开会
+  gtd inbox
+  gtd clarify 1
+  gtd recommend --context=@电脑 --minutes=20 --energy=low
+  gtd integrity
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from gtd.db import (  # noqa: E402
+    add_to_inbox,
+    get_inbox_item,
+    get_integrity_issues,
+    get_weekly_review,
+    list_actions,
+    list_inbox,
+    list_projects,
+    list_someday,
+    list_waiting_for,
+)
+from gtd.engine.clarify import clarify, confirm  # noqa: E402
+
+
+def cmd_add(args):
+    text = " ".join(args.text) if isinstance(args.text, list) else args.text
+    rid = add_to_inbox(text, source="cli")
+    print(f"[{rid}] ✓ 已收集: {text}")
+
+
+def cmd_inbox(args):
+    items = list_inbox(status=args.status)
+    if not items:
+        print("收集箱为空。")
+        return
+    for item in items:
+        status_icon = {"captured": "📥", "clarifying": "🔄", "clarified": "✅"}.get(
+            item["status"], "  "
+        )
+        print(f"[{item['id']}] {status_icon} {item['raw_text']}")
+        if item.get("clarify_result_json"):
+            try:
+                cr = json.loads(item["clarify_result_json"])
+                dest = cr.get("destination", "?")
+                na = cr.get("next_action", {}) or {}
+                na_title = na.get("title", "-")
+                print(f"     → {dest}: {na_title}")
+            except json.JSONDecodeError:
+                pass
+
+
+def cmd_clarify(args):
+    try:
+        result = clarify(args.id)
+    except Exception as e:
+        print(f"✗ 澄清失败: {e}")
+        sys.exit(1)
+
+    na = result.get("next_action") or {}
+    print(f"[{args.id}] 澄清结果:")
+    print(f"  可执行:     {'是' if result.get('is_actionable') else '否'}")
+    print(f"  是项目:     {'是' if result.get('is_project') else '否'}")
+    if result.get("is_project"):
+        print(f"  项目标题:   {result.get('project_title')}")
+        print(f"  期望结果:   {result.get('desired_outcome')}")
+    if na.get("title"):
+        print(f"  下一步:     {na['title']}")
+        print(f"  情境:       {na.get('context_tag', '-')}")
+        print(f"  精力:       {na.get('energy_level', '-')}")
+        print(f"  预估时间:   {na.get('estimated_minutes', '-')} 分钟")
+    print(f"  目的地:     {result.get('destination')}")
+    print(f"  判断依据:   {result.get('reasoning')}")
+    if result.get("needs_clarification"):
+        print(f"  ⚠ 需澄清:   {result.get('clarification_question')}")
+    print()
+    print("确认写入请执行: gtd confirm " + str(args.id))
+
+
+def cmd_confirm(args):
+    item = get_inbox_item(args.id)
+    if not item:
+        print(f"✗ 未找到收集项 {args.id}")
+        sys.exit(1)
+
+    cr_json = item.get("clarify_result_json")
+    if not cr_json:
+        print(f"✗ 请先运行 'gtd clarify {args.id}' 澄清此项")
+        sys.exit(1)
+
+    try:
+        result = json.loads(cr_json)
+        out = confirm(args.id, result)
+        created = out.get("created_entities", {})
+        dest = result.get("destination", "trash")
+        print(f"[{args.id}] ✓ 已确认 → {dest}")
+        if created:
+            for k, v in created.items():
+                print(f"  创建 {k}={v}")
+    except Exception as e:
+        print(f"✗ 确认失败: {e}")
+        sys.exit(1)
+
+
+def cmd_recommend(args):
+    actions = list_actions(
+        status="next",
+        context_tag=args.context,
+        energy_level=args.energy,
+        max_minutes=args.minutes,
+    )
+
+    scored = []
+    for a in actions:
+        score = 0
+        if args.context and a.get("context_tag") == args.context:
+            score += 50
+        if args.minutes and a.get("estimated_minutes", 999) <= args.minutes:
+            score += 20
+        if args.energy and a.get("energy_level") == args.energy:
+            score += 20
+        if a.get("project_id"):
+            score += 10
+        if a.get("due_at"):
+            score += 10
+        scored.append((score, a))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    if not scored:
+        print("暂无匹配的待办行动。")
+        if not list_actions("next"):
+            print("（系统中还没有待办行动，先 gtd add 然后 gtd clarify 吧）")
+        return
+
+    for score, a in scored[:5]:
+        icon = {80: "⭐", 70: "●", 50: "○", 0: "·"}.get(
+            max(k for k in [80, 70, 50, 0] if score >= k), "·"
+        )
+        tag_str = f"@{a.get('context_tag', '-')}"
+        min_str = f"{a['estimated_minutes']}min" if a.get("estimated_minutes") else "?"
+        energy_str = a.get("energy_level", "-")
+        print(f"  {icon} [{a['id']}] {a['title']}")
+        print(f"     {tag_str} · {min_str} · {energy_str} · 得分:{score}")
+
+
+def cmd_integrity(args):
+    issues = get_integrity_issues()
+    if not issues:
+        print("✓ 系统健康，未发现失信点。")
+        return
+    for issue in issues:
+        t = issue["type"]
+        if t == "missing_next_action":
+            print(f"⚠ 项目缺少下一步行动: [{issue['project_id']}] {issue['project_title']}")
+        elif t == "stale_waiting_for":
+            print(f"⚠ 等待事项超时: [{issue['waiting_for_id']}] {issue['item']} (等待: {issue['person']})")
+        elif t == "stale_inbox":
+            print(f"⚠ 收集箱超过3天未处理: [{issue['inbox_id']}] {issue['raw_text']}")
+
+
+def cmd_review_start(args):
+    from gtd.db import create_weekly_review
+    rid = create_weekly_review()
+    review = get_weekly_review(rid)
+    print(f"周回顾已启动 (id={rid})")
+    for s in review.get("steps", []):
+        icon = "✓" if s["status"] == "done" else "○"
+        print(f"  {icon} {s['step_key']}")
+
+
+def cmd_review_step(args):
+    from gtd.db import complete_review_step
+    complete_review_step(args.review_id, args.step_key,
+                         user_notes=getattr(args, 'notes', None))
+    review = get_weekly_review(args.review_id)
+    for s in review.get("steps", []):
+        icon = "✓" if s["status"] == "done" else "○"
+        print(f"  {icon} {s['step_key']}")
+
+
+def cmd_review_summary(args):
+    from gtd.db import complete_weekly_review
+    review = get_weekly_review(args.review_id)
+    if not review:
+        print(f"✗ 未找到回顾 {args.review_id}")
+        sys.exit(1)
+    issues = get_integrity_issues()
+    issues_found = {
+        "missing_next_actions": sum(1 for i in issues if i["type"] == "missing_next_action"),
+        "stale_waiting_for": sum(1 for i in issues if i["type"] == "stale_waiting_for"),
+        "stale_inbox": sum(1 for i in issues if i["type"] == "stale_inbox"),
+    }
+    complete_weekly_review(
+        args.review_id,
+        summary=f"回顾完成。发现{issues_found['missing_next_actions']}个项目缺下一步行动。",
+        issues_found=issues_found,
+    )
+    print(f"[{args.review_id}] 周回顾完成")
+    print(f"  缺下一步行动的项目: {issues_found['missing_next_actions']}")
+    print(f"  超期待跟进事项:     {issues_found['stale_waiting_for']}")
+    print(f"  过期收集箱项:       {issues_found['stale_inbox']}")
+
+
+def cmd_projects(args):
+    projects = list_projects()
+    if not projects:
+        print("暂无活跃项目。")
+        return
+    for p in projects:
+        status_icon = {"active": "▶", "on_hold": "⏸", "completed": "✓"}.get(p["status"], " ")
+        print(f"[{p['id']}] {status_icon} {p['title']}")
+        if p.get("desired_outcome"):
+            print(f"     期望结果: {p['desired_outcome']}")
+
+
+def cmd_actions(args):
+    actions = list_actions(status=args.status or "next")
+    if not actions:
+        print("暂无待办行动。")
+        return
+    for a in actions:
+        tag = f"@{a.get('context_tag', '-')}"
+        energy = a.get("energy_level", "-")
+        mins = f"{a['estimated_minutes']}min" if a.get("estimated_minutes") else "?"
+        proj = f" [项目{a['project_id']}]" if a.get("project_id") else ""
+        print(f"[{a['id']}] {a['title']}{proj}")
+        print(f"     {tag} · {mins} · 精力:{energy}")
+
+
+def cmd_waiting(args):
+    items = list_waiting_for()
+    if not items:
+        print("暂无等待事项。")
+        return
+    for w in items:
+        print(f"[{w['id']}] {w['item']}")
+        print(f"     等待: {w.get('person', '-')} · 跟进: {w.get('follow_up_at', '-')}")
+
+
+def cmd_someday(args):
+    items = list_someday()
+    if not items:
+        print("Someday/Maybe 列表为空。")
+        return
+    for s in items:
+        cat = f"[{s.get('category', '-')}]" if s.get("category") else ""
+        print(f"[{s['id']}] {cat} {s['item']}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="GTD CLI — 个人任务管理系统",
+        usage="gtd <命令> [选项]",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # add
+    p_add = sub.add_parser("add", help="捕获一条事项")
+    p_add.add_argument("text", nargs="+", help="事项内容")
+    p_add.set_defaults(func=cmd_add)
+
+    # inbox
+    p_inbox = sub.add_parser("inbox", help="列出收集箱")
+    p_inbox.add_argument("--status", help="过滤状态: captured/clarifying/clarified")
+    p_inbox.set_defaults(func=cmd_inbox)
+
+    # clarify
+    p_clarify = sub.add_parser("clarify", help="澄清某条事项")
+    p_clarify.add_argument("id", type=int, help="Inbox 项 ID")
+    p_clarify.set_defaults(func=cmd_clarify)
+
+    # confirm
+    p_confirm = sub.add_parser("confirm", help="确认澄清结果并写入清单")
+    p_confirm.add_argument("id", type=int, help="Inbox 项 ID")
+    p_confirm.set_defaults(func=cmd_confirm)
+
+    # recommend
+    p_rec = sub.add_parser("recommend", help="情境推荐")
+    p_rec.add_argument("--context", help="情境: @电脑/@电话/@家/@外出")
+    p_rec.add_argument("--minutes", type=int, help="可用分钟数")
+    p_rec.add_argument("--energy", help="精力: low/medium/high")
+    p_rec.set_defaults(func=cmd_recommend)
+
+    # integrity
+    p_int = sub.add_parser("integrity", help="系统完整性检查")
+    p_int.set_defaults(func=cmd_integrity)
+
+    # review
+    p_review = sub.add_parser("review", help="周回顾")
+    r_sub = p_review.add_subparsers(dest="review_cmd")
+    r_start = r_sub.add_parser("start", help="启动周回顾")
+    r_start.set_defaults(func=cmd_review_start)
+    r_step = r_sub.add_parser("step", help="完成回顾步骤")
+    r_step.add_argument("review_id", type=int)
+    r_step.add_argument("step_key")
+    r_step.add_argument("--notes", help="备注")
+    r_step.set_defaults(func=cmd_review_step)
+    r_sum = r_sub.add_parser("summary", help="查看回顾摘要")
+    r_sum.add_argument("review_id", type=int)
+    r_sum.set_defaults(func=cmd_review_summary)
+
+    # list commands
+    p_proj = sub.add_parser("projects", help="列出活跃项目")
+    p_proj.set_defaults(func=cmd_projects)
+    p_act = sub.add_parser("actions", help="列出待办行动")
+    p_act.add_argument("--status", default="next")
+    p_act.set_defaults(func=cmd_actions)
+    p_wait = sub.add_parser("waiting", help="列出等待事项")
+    p_wait.set_defaults(func=cmd_waiting)
+    p_sm = sub.add_parser("someday", help="列出 Someday/Maybe")
+    p_sm.set_defaults(func=cmd_someday)
+
+    args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    from gtd.db import init_db
+    init_db()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

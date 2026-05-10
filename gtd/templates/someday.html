@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}将来/也许 - GTD{% endblock %}
+
+{% block content %}
+
+<h1>💡 将来/也许</h1>
+<p class="sub">共 {{ items|length }} 条</p>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-text">{{ item.item }}</span>
+    </div>
+    {% if item.category or item.notes %}
+    <div class="item-sub">
+      {% if item.category %}<span class="tag">{{ item.category }}</span>{% endif %}
+      {% if item.notes %}{{ item.notes }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">暂无将来/也许条目。<br>从<a href="/inbox">收集箱</a>整理暂不行动的条目。</div>
+{% endif %}
+
+{% endblock %}

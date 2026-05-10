@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}项目 - GTD{% endblock %}
+
+{% block content %}
+
+<h1>📁 项目</h1>
+<p class="sub">共 {{ items|length }} 个活跃项目</p>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-text">{{ item.title }}</span>
+      {% if item.review_status %}
+      <span class="time">{{ item.review_status }}</span>
+      {% endif %}
+    </div>
+    {% if item.desired_outcome %}
+    <div class="item-sub">🎯 {{ item.desired_outcome }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">暂无项目。<br>从<a href="/inbox">收集箱</a>整理条目以创建项目。</div>
+{% endif %}
+
+{% endblock %}

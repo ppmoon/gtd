@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}完成 - GTD{% endblock %}
+
+{% block content %}
+
+<h1>🎉 完成</h1>
+<p class="sub">共 {{ items|length }} 条完成记录</p>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-text">{{ item.title }}</span>
+      {% if item.completed_at or item.created_at %}
+      <span class="time">{{ item.completed_at or item.created_at }}</span>
+      {% endif %}
+    </div>
+    {% if item.completion_type %}
+    <div class="item-sub">
+      <span class="tag">{{ item.completion_type }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">暂无完成记录。<br>从<a href="/inbox">收集箱</a>可直接归档到“完成”。</div>
+{% endif %}
+
+{% endblock %}

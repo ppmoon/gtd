@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}参考 - GTD{% endblock %}
+
+{% block content %}
+
+<h1>📚 参考</h1>
+<p class="sub">共 {{ items|length }} 条参考资料</p>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-text">{{ item.title }}</span>
+      {% if item.created_at %}
+      <span class="time">{{ item.created_at }}</span>
+      {% endif %}
+    </div>
+    {% if item.source or item.content %}
+    <div class="item-sub">
+      {% if item.source %}<span class="tag">{{ item.source }}</span>{% endif %}
+      {% if item.content %}<br>{{ item.content }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">暂无参考资料。<br>从<a href="/inbox">收集箱</a>整理非行动信息到这里。</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}等待 - GTD{% endblock %}
+
+{% block content %}
+
+<h1>⏳ 等待</h1>
+<p class="sub">共 {{ items|length }} 条等待事项</p>
+
+{% if items %}
+  {% for item in items %}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-text">{{ item.item }}</span>
+    </div>
+    <div class="item-sub">
+      {% if item.person %}👤 {{ item.person }}{% endif %}
+      {% if item.follow_up_at %} · 跟进: {{ item.follow_up_at }}{% endif %}
+      {% if item.notes %}<br>{{ item.notes }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">暂无等待事项。<br>从<a href="/inbox">收集箱</a>整理委托给他人的条目。</div>
+{% endif %}
+
+{% endblock %}

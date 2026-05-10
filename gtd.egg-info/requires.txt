@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+lark-oapi
+pydantic-settings
+jinja2
+litellm
