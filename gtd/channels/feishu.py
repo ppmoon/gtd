@@ -15,6 +15,7 @@ from lark_oapi.event.dispatcher_handler import (
 from lark_oapi.ws import Client as WsClient
 
 from gtd.db import add_to_inbox
+from gtd.engine.classify import classify
 from gtd.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -43,8 +44,11 @@ def _on_message(event: P2ImMessageReceiveV1) -> None:
         ensure_ascii=False,
     )
 
-    add_to_inbox(text, source="feishu", source_meta=meta)
+    item_id = add_to_inbox(text, source="feishu", source_meta=meta)
     _send_reply(msg.chat_id, "已收集 ✓")
+    threading.Thread(
+        target=classify, args=(item_id,), daemon=True, name=f"classify-{item_id}"
+    ).start()
 
 
 def _send_reply(chat_id: str, text: str) -> None:
