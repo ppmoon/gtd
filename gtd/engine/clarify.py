@@ -14,7 +14,7 @@ from gtd.db import (
     set_inbox_clarifying,
 )
 from gtd.engine.llm import call_llm
-from gtd.engine.prompts import CLARIFY_SYSTEM_PROMPT, CLARIFY_USER_PROMPT
+from gtd.engine.prompts import CLARIFY_SYSTEM_PROMPT, CLARIFY_USER_PROMPT, QUADRANT_CLARIFY_HINTS
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,12 @@ VALID_DESTINATIONS = {
 }
 
 
+def build_clarify_system_prompt(quadrant: str | None) -> str:
+    if quadrant and quadrant in QUADRANT_CLARIFY_HINTS:
+        return CLARIFY_SYSTEM_PROMPT + "\n\n" + QUADRANT_CLARIFY_HINTS[quadrant]
+    return CLARIFY_SYSTEM_PROMPT
+
+
 def clarify(inbox_id: int) -> dict:
     """Run clarify engine on an inbox item. Returns the LLM result dict."""
     item = get_inbox_item(inbox_id)
@@ -39,8 +45,9 @@ def clarify(inbox_id: int) -> dict:
 
     set_inbox_clarifying(inbox_id)
 
+    system_prompt = build_clarify_system_prompt(item.get("quadrant"))
     user_prompt = CLARIFY_USER_PROMPT.format(raw_text=item["raw_text"])
-    result = call_llm(CLARIFY_SYSTEM_PROMPT, user_prompt)
+    result = call_llm(system_prompt, user_prompt)
 
     result = _validate(result)
     set_inbox_clarified(inbox_id, result)
