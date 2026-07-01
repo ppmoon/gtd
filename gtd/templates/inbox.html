@@ -72,12 +72,49 @@
   .status-message.error { color: #dc2626; }
   .status-message.success { color: #059669; }
   .status-message.info { color: #2563eb; }
+  .quadrant-badge {
+    font-size: 0.72em; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+    cursor: pointer; border: none; color: #fff;
+  }
+  .quadrant-q1 { background: #dc2626; }
+  .quadrant-q2 { background: #2563eb; }
+  .quadrant-q3 { background: #ea580c; }
+  .quadrant-q4 { background: #6b7280; }
+  .quadrant-pending { background: #9ca3af; color: #fff; }
+  .quadrant-classifying { background: #f59e0b; color: #1f2937; }
+  .quadrant-failed { background: #fecaca; color: #991b1b; }
+  .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+  .filter-btn {
+    font-size: 0.8em; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid #d1d5db; background: #fff; cursor: pointer;
+  }
+  .filter-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .view-toggle { margin-left: auto; }
+  .matrix-view { display: none; }
+  .matrix-view.active { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .list-view.hidden { display: none; }
+  .matrix-cell {
+    background: #fff; border-radius: 8px; padding: 10px; min-height: 120px;
+    border: 2px solid #e5e7eb;
+  }
+  .matrix-cell.q1 { border-color: #fca5a5; }
+  .matrix-cell.q2 { border-color: #93c5fd; }
+  .matrix-cell.q3 { border-color: #fdba74; }
+  .matrix-cell.q4 { border-color: #d1d5db; }
+  .matrix-cell h3 { font-size: 0.85em; margin-bottom: 8px; }
+  .matrix-card {
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+    padding: 8px; margin-bottom: 6px; font-size: 0.85em; cursor: grab;
+  }
+  .matrix-unclassified { margin-top: 12px; background: #fff; border-radius: 8px; padding: 10px; }
+  .item-top { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
+  .item-top .item-text { flex: 1; }
 {% endblock %}
 
 {% block content %}
 
 <h1>📥 GTD 收集箱</h1>
-<p class="sub">共 {{ count }} 条 · 自动刷新每 30 秒</p>
+<p class="sub" id="poll-hint">共 {{ count }} 条 · 自动刷新</p>
 
 <div class="guide">
   📌 收集箱仅用于<strong>临时捕获</strong>想法 —— 请定期将条目整理到对应的 GTD 清单中。
@@ -101,11 +138,36 @@
   </a>
 </div>
 
+<div class="toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+  <div class="filter-bar" id="quadrant-filter">
+    <button class="filter-btn active" data-filter="all">全部</button>
+    <button class="filter-btn" data-filter="q1">Q1 立即处理</button>
+    <button class="filter-btn" data-filter="q2">Q2 计划安排</button>
+    <button class="filter-btn" data-filter="q3">Q3 委派他人</button>
+    <button class="filter-btn" data-filter="q4">Q4 考虑放弃</button>
+    <button class="filter-btn" data-filter="unclassified">未分类</button>
+    <button class="filter-btn view-toggle" id="view-toggle-btn" onclick="toggleView()">切换到矩阵</button>
+  </div>
+</div>
+
+<div id="matrix-view" class="matrix-view">
+  <div class="matrix-cell q1" data-quadrant="q1" ondragover="allowDrop(event)" ondrop="dropCard(event,'q1')"><h3>Q1 立即处理</h3><div class="matrix-drop"></div></div>
+  <div class="matrix-cell q2" data-quadrant="q2" ondragover="allowDrop(event)" ondrop="dropCard(event,'q2')"><h3>Q2 计划安排</h3><div class="matrix-drop"></div></div>
+  <div class="matrix-cell q3" data-quadrant="q3" ondragover="allowDrop(event)" ondrop="dropCard(event,'q3')"><h3>Q3 委派他人</h3><div class="matrix-drop"></div></div>
+  <div class="matrix-cell q4" data-quadrant="q4" ondragover="allowDrop(event)" ondrop="dropCard(event,'q4')"><h3>Q4 考虑放弃</h3><div class="matrix-drop"></div></div>
+</div>
+<div id="matrix-unclassified" class="matrix-unclassified" style="display:none;">
+  <h3>待分类</h3>
+  <div id="matrix-unclassified-list"></div>
+</div>
+
+<div id="list-view" class="list-view">
 {% if items %}
   {% for item in items %}
-  <div class="item" id="item-{{ item.id }}" data-item-id="{{ item.id }}" data-raw-text="{{ item.raw_text|e }}" data-source="{{ item.source|e }}" data-created-at="{{ item.created_at|e }}" data-status="{{ item.status|e }}">
+  <div class="item" id="item-{{ item.id }}" data-item-id="{{ item.id }}" data-raw-text="{{ item.raw_text|e }}" data-source="{{ item.source|e }}" data-created-at="{{ item.created_at|e }}" data-status="{{ item.status|e }}" data-quadrant="{{ item.quadrant or '' }}" data-quadrant-status="{{ item.quadrant_status or 'pending' }}" data-quadrant-reasoning="{{ (item.quadrant_reasoning or '')|e }}">
     <div class="item-top">
       <span class="item-text">{{ item.raw_text }}</span>
+      <span class="quadrant-slot" id="quadrant-badge-{{ item.id }}"></span>
       <div class="meta">
         <span class="source {{ item.source }}">{{ item.source }}</span>
         <span class="time">{{ item.created_at }}</span>
@@ -119,6 +181,7 @@
 {% else %}
   <div class="empty">收集箱是空的。在上方输入框直接收集，或使用飞书、终端、书签工具添加。</div>
 {% endif %}
+</div>
 
 <div class="modal-backdrop" id="action-card-backdrop" onclick="closeActionCard(event)">
   <div class="modal-card" onclick="event.stopPropagation()">
@@ -181,8 +244,13 @@
     trash: '丢弃'
   };
 
+  const QUADRANT_LABELS = {
+    q1: 'Q1 立即处理', q2: 'Q2 计划安排', q3: 'Q3 委派他人', q4: 'Q4 考虑放弃'
+  };
+
   let currentItemId = null;
   let currentClarifyResult = null;
+  let currentView = 'list';
 
   function capture(event) {
     event.preventDefault();
@@ -236,12 +304,23 @@
     const status = item.dataset.status || '';
 
     document.getElementById('card-item-text').textContent = rawText;
-    document.getElementById('card-item-meta').innerHTML = [
+    const quadrant = item.dataset.quadrant || '';
+    const qStatus = item.dataset.quadrantStatus || '';
+    const reasoning = item.dataset.quadrantReasoning || '';
+
+    const chips = [
       '<span class="meta-chip">#' + itemId + '</span>',
       '<span class="meta-chip">来源：' + escapeHtml(source) + '</span>',
       '<span class="meta-chip">状态：' + escapeHtml(status) + '</span>',
       '<span class="meta-chip">创建：' + escapeHtml(createdAt) + '</span>'
-    ].join('');
+    ];
+    if (quadrant) {
+      chips.push('<span class="meta-chip">' + escapeHtml(QUADRANT_LABELS[quadrant] || quadrant) + '</span>');
+    }
+    if (reasoning) {
+      chips.push('<span class="meta-chip">象限依据：' + escapeHtml(reasoning) + '</span>');
+    }
+    document.getElementById('card-item-meta').innerHTML = chips.join('');
 
     document.getElementById('clarify-result').style.display = 'none';
     document.getElementById('clarify-result').innerHTML = '';
@@ -368,6 +447,115 @@
     return div.innerHTML;
   }
 
-  setTimeout(() => location.reload(), 30000);
+  function renderQuadrantBadge(itemEl) {
+    const status = itemEl.dataset.quadrantStatus || 'pending';
+    const quadrant = itemEl.dataset.quadrant || '';
+    const itemId = itemEl.dataset.itemId;
+    const slot = itemEl.querySelector('.quadrant-slot');
+    if (!slot) return;
+    if (status === 'classifying') {
+      slot.innerHTML = '<span class="quadrant-badge quadrant-classifying">分类中…</span>';
+    } else if (status === 'failed') {
+      slot.innerHTML = '<button class="quadrant-badge quadrant-failed" onclick="retryClassify(' + itemId + ')">分类失败 · 重试</button>';
+    } else if (quadrant) {
+      slot.innerHTML = '<button class="quadrant-badge quadrant-' + quadrant + '" onclick="cycleQuadrant(' + itemId + ', \'' + quadrant + '\')">' + (QUADRANT_LABELS[quadrant] || quadrant) + '</button>';
+    } else {
+      slot.innerHTML = '<span class="quadrant-badge quadrant-pending">未分类</span>';
+    }
+  }
+
+  function cycleQuadrant(itemId, current) {
+    const order = ['q1', 'q2', 'q3', 'q4'];
+    const next = order[(order.indexOf(current) + 1) % order.length];
+    patchQuadrant(itemId, next);
+  }
+
+  function patchQuadrant(itemId, quadrant) {
+    fetch('/api/inbox/' + itemId + '/quadrant', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({quadrant: quadrant})
+    }).then(() => location.reload());
+  }
+
+  function retryClassify(itemId) {
+    fetch('/api/inbox/' + itemId + '/classify', {method: 'POST'})
+      .then(() => location.reload());
+  }
+
+  function toggleView() {
+    currentView = currentView === 'list' ? 'matrix' : 'list';
+    document.getElementById('list-view').classList.toggle('hidden', currentView === 'matrix');
+    document.getElementById('matrix-view').classList.toggle('active', currentView === 'matrix');
+    document.getElementById('view-toggle-btn').textContent =
+      currentView === 'list' ? '切换到矩阵' : '切换到列表';
+    if (currentView === 'matrix') buildMatrix();
+  }
+
+  function buildMatrix() {
+    ['q1','q2','q3','q4'].forEach(q => {
+      const cell = document.querySelector('.matrix-cell[data-quadrant="' + q + '"] .matrix-drop');
+      if (cell) cell.innerHTML = '';
+    });
+    const unclassified = document.getElementById('matrix-unclassified-list');
+    unclassified.innerHTML = '';
+    let hasUnclassified = false;
+
+    document.querySelectorAll('.item[data-item-id]').forEach(el => {
+      const id = el.dataset.itemId;
+      const text = el.dataset.rawText || '';
+      const q = el.dataset.quadrant || '';
+      const st = el.dataset.quadrantStatus || '';
+      const card = document.createElement('div');
+      card.className = 'matrix-card';
+      card.draggable = true;
+      card.dataset.itemId = id;
+      card.textContent = text;
+      card.ondragstart = (e) => { e.dataTransfer.setData('text/plain', id); };
+
+      if (q && st === 'classified') {
+        const drop = document.querySelector('.matrix-cell[data-quadrant="' + q + '"] .matrix-drop');
+        if (drop) drop.appendChild(card);
+      } else {
+        unclassified.appendChild(card);
+        hasUnclassified = true;
+      }
+    });
+    document.getElementById('matrix-unclassified').style.display = hasUnclassified ? '' : 'none';
+  }
+
+  function allowDrop(e) { e.preventDefault(); }
+
+  function dropCard(e, quadrant) {
+    e.preventDefault();
+    const itemId = e.dataTransfer.getData('text/plain');
+    if (itemId) patchQuadrant(itemId, quadrant);
+  }
+
+  document.querySelectorAll('.item[data-item-id]').forEach(renderQuadrantBadge);
+
+  document.querySelectorAll('#quadrant-filter .filter-btn[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#quadrant-filter .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const f = btn.dataset.filter;
+      document.querySelectorAll('.item[data-item-id]').forEach(el => {
+        const q = el.dataset.quadrant || '';
+        const show = f === 'all' || (f === 'unclassified' && !q) || (f === q);
+        el.style.display = show ? '' : 'none';
+      });
+    });
+  });
+
+  function getPollInterval() {
+    return document.querySelector('[data-quadrant-status="classifying"]') ? 5000 : 30000;
+  }
+  function scheduleReload() {
+    const hint = document.getElementById('poll-hint');
+    const ms = getPollInterval();
+    if (hint) hint.textContent = hint.textContent.split('·')[0].trim() + ' · 自动刷新每 ' + (ms / 1000) + ' 秒';
+    setTimeout(() => location.reload(), ms);
+  }
+  scheduleReload();
 </script>
 {% endblock %}
