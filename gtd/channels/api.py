@@ -2,7 +2,7 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 
@@ -35,16 +35,21 @@ from gtd.db import (
     reference_count,
     someday_count,
     update_action,
+    update_inbox_quadrant_user,
     waiting_count,
 )
+from gtd.engine.classify import classify
 from gtd.engine.clarify import clarify, confirm
 from gtd.models import (
     ActionUpdateRequest,
     ClarifyConfirmRequest,
     InboxAddRequest,
+    QuadrantUpdateRequest,
     ReviewStepRequest,
     RouteInboxRequest,
 )
+
+VALID_QUADRANTS = {"q1", "q2", "q3", "q4"}
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -72,10 +77,11 @@ def _nav_counts() -> dict:
 # ── Capture ────────────────────────────────────────────
 
 @router.post("/api/inbox")
-def api_add_inbox(req: InboxAddRequest):
+def api_add_inbox(req: InboxAddRequest, background_tasks: BackgroundTasks):
     if not req.text.strip():
         return {"ok": False, "error": "text is empty"}
     rid = add_to_inbox(req.text.strip(), req.source)
+    background_tasks.add_task(classify, rid)
     return {"ok": True, "id": rid, "status": "captured"}
 
 
@@ -83,6 +89,30 @@ def api_add_inbox(req: InboxAddRequest):
 def api_list_inbox(status: str | None = None):
     items = list_inbox(status=status)
     return {"ok": True, "count": len(items), "items": items}
+
+
+@router.post("/api/inbox/{inbox_id}/classify")
+def api_classify_inbox(inbox_id: int):
+    item = get_inbox_item(inbox_id)
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+    try:
+        result = classify(inbox_id)
+        return {"ok": True, "inbox_id": inbox_id, "result": result}
+    except Exception as e:
+        logger.exception("Classify failed")
+        raise HTTPException(500, f"Classify failed: {e}")
+
+
+@router.patch("/api/inbox/{inbox_id}/quadrant")
+def api_update_quadrant(inbox_id: int, req: QuadrantUpdateRequest):
+    item = get_inbox_item(inbox_id)
+    if not item:
+        raise HTTPException(404, "Inbox item not found")
+    if req.quadrant not in VALID_QUADRANTS:
+        raise HTTPException(400, f"invalid quadrant: {req.quadrant}")
+    update_inbox_quadrant_user(inbox_id, req.quadrant)
+    return {"ok": True, "inbox_id": inbox_id, "quadrant": req.quadrant}
 
 
 # ── Clarify ────────────────────────────────────────────
