@@ -20,6 +20,8 @@ def call_llm(system_prompt: str, user_prompt: str) -> dict:
     model = settings.llm_model
 
     if not model or model == "mock":
+        if "艾森豪威尔" in system_prompt:
+            return _mock_classify_response(user_prompt)
         return _mock_response(user_prompt)
 
     return _call_litellm(model, system_prompt, user_prompt)
@@ -223,6 +225,20 @@ def _extract_json_object(text: str) -> dict | None:
 
 
 # ── Mock provider (no API key needed, for testing) ─────
+
+def _mock_classify_response(user_prompt: str) -> dict:
+    text = user_prompt.split("\n")[-1].strip()
+    q1_kw = ["投诉", "紧急", "今天", "马上", "立即", "截止"]
+    q3_kw = ["助理", "帮忙", "让别人", "委派", "打印"]
+    q4_kw = ["随便", "无聊", "看看", "测试", "test", "要不要"]
+    if any(k in text for k in q1_kw):
+        return {"quadrant": "q1", "reasoning": "紧急且重要"}
+    if any(k in text for k in q3_kw):
+        return {"quadrant": "q3", "reasoning": "紧急但不重要，适合委派"}
+    if any(k in text for k in q4_kw):
+        return {"quadrant": "q4", "reasoning": "不重要不紧急"}
+    return {"quadrant": "q2", "reasoning": "重要但不紧急，适合计划安排"}
+
 
 def _mock_response(user_prompt: str) -> dict:
     """Keyword-based mock clarify result."""

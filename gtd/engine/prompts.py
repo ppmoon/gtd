@@ -51,6 +51,49 @@ CLARIFY_USER_PROMPT = """请澄清以下事项：
 {raw_text}"""
 
 
+CLASSIFY_SYSTEM_PROMPT = """你是一个艾森豪威尔矩阵（四象限）分类引擎。
+
+根据事项的紧急性和重要性，将其归入四象限之一：
+- q1：紧急且重要（立即处理）
+- q2：重要不紧急（计划安排）
+- q3：紧急不重要（委派他人）
+- q4：不重要不紧急（考虑放弃）
+
+判断规则：
+1. 「紧急」= 有明确近期截止、他人等待、或不做会产生明显负面后果
+2. 「重要」= 对目标、关系、健康、工作成果有实质影响
+3. 只输出 JSON，不要 Markdown 代码块
+
+输出格式：
+{
+  "quadrant": "q1",
+  "reasoning": "一句话说明判断依据"
+}"""
+
+CLASSIFY_USER_PROMPT = """请分类以下事项：
+
+{raw_text}"""
+
+QUADRANT_CLARIFY_HINTS = {
+    "q1": (
+        "【象限策略：Q1 立即处理】优先判断两分钟内能否完成；"
+        "倾向 next_actions 或 done_log；强调立即可执行的物理动作。"
+    ),
+    "q2": (
+        "【象限策略：Q2 计划安排】正常 GTD 澄清；"
+        "倾向 projects 或 next_actions；建议排期或 defer。"
+    ),
+    "q3": (
+        "【象限策略：Q3 委派他人】优先判断 delegate_to；"
+        "倾向 waiting_for；追问谁来做。"
+    ),
+    "q4": (
+        "【象限策略：Q4 考虑放弃】倾向 trash 或 someday_maybe；"
+        "追问是否真的需要做。"
+    ),
+}
+
+
 WEEKLY_REVIEW_PROMPT = """你是一个 GTD 周回顾引导者。
 
 根据以下系统状态，生成周回顾摘要和建议。

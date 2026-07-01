@@ -61,3 +61,95 @@ def test_list_inbox_sorts_by_quadrant_priority(temp_db):
     set_inbox_quadrant_classified(q2, "q2", "重要")
     ids = [item["id"] for item in list_inbox()]
     assert ids.index(q1) < ids.index(q2) < ids.index(q4)
+
+
+from gtd.engine.llm import _mock_classify_response
+
+
+def test_mock_classify_q1_urgent_important():
+    r = _mock_classify_response("请分类以下事项：\n客户投诉需今天回复")
+    assert r["quadrant"] == "q1"
+
+
+def test_mock_classify_q3_delegate():
+    r = _mock_classify_response("请分类以下事项：\n让助理打印文件")
+    assert r["quadrant"] == "q3"
+
+
+def test_mock_classify_q4_low_priority():
+    r = _mock_classify_response("请分类以下事项：\n随便看看新闻")
+    assert r["quadrant"] == "q4"
+
+
+def test_mock_classify_q2_default():
+    r = _mock_classify_response("请分类以下事项：\n学习 Python")
+    assert r["quadrant"] == "q2"
+
+
+from unittest.mock import patch
+
+from gtd.engine.classify import classify, _validate_classify_result
+
+
+def test_validate_classify_result_accepts_valid():
+    assert _validate_classify_result({"quadrant": "q2", "reasoning": "ok"}) == {
+        "quadrant": "q2",
+        "reasoning": "ok",
+    }
+
+
+def test_validate_classify_result_rejects_bad_quadrant():
+    result = _validate_classify_result({"quadrant": "q9", "reasoning": "x"})
+    assert result["quadrant"] == "q2"
+
+
+def test_classify_success(temp_db):
+    item_id = add_to_inbox("学习 Python")
+    with patch("gtd.engine.classify.call_llm", return_value={"quadrant": "q2", "reasoning": "重要不紧急"}):
+        result = classify(item_id)
+    assert result["quadrant"] == "q2"
+    item = get_inbox_item(item_id)
+    assert item["quadrant_status"] == "classified"
+
+
+def test_classify_retries_then_fails(temp_db):
+    item_id = add_to_inbox("失败测试")
+    with patch("gtd.engine.classify.call_llm", side_effect=RuntimeError("api down")):
+        with pytest.raises(RuntimeError):
+            classify(item_id)
+    item = get_inbox_item(item_id)
+    assert item["quadrant_status"] == "failed"
+
+
+from fastapi.testclient import TestClient
+
+from gtd.main import app
+
+
+@pytest.fixture()
+def client(temp_db):
+    return TestClient(app)
+
+
+def test_api_add_inbox_triggers_classify(client):
+    with patch("gtd.channels.api.classify") as mock_classify:
+        resp = client.post("/api/inbox", json={"text": "测试", "source": "web"})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    mock_classify.assert_called_once()
+
+
+def test_api_patch_quadrant(client, temp_db):
+    item_id = add_to_inbox("读书")
+    resp = client.patch(f"/api/inbox/{item_id}/quadrant", json={"quadrant": "q2"})
+    assert resp.status_code == 200
+    assert get_inbox_item(item_id)["quadrant"] == "q2"
+    assert get_inbox_item(item_id)["quadrant_source"] == "user"
+
+
+def test_api_reclassify(client, temp_db):
+    item_id = add_to_inbox("紧急事项")
+    with patch("gtd.engine.classify.classify", return_value={"quadrant": "q1", "reasoning": "紧急"}):
+        resp = client.post(f"/api/inbox/{item_id}/classify")
+    assert resp.status_code == 200
+    assert resp.json()["result"]["quadrant"] == "q1"
