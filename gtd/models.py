@@ -59,3 +59,14 @@ class ActionUpdateRequest(BaseModel):
 
 class ReviewStepRequest(BaseModel):
     user_notes: str | None = None
+
+
+# ── Eisenhower Quadrant Classification ─────────────────
+
+class ClassifyResult(BaseModel):
+    quadrant: str
+    reasoning: str
+
+
+class QuadrantUpdateRequest(BaseModel):
+    quadrant: str

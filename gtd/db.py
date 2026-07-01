@@ -130,6 +130,41 @@ def init_db() -> None:
     """)
     conn.commit()
     conn.close()
+    migrate_inbox_quadrant_columns()
+
+
+_QUADRANT_COLUMNS = [
+    ("quadrant", "TEXT"),
+    ("quadrant_status", "TEXT NOT NULL DEFAULT 'pending'"),
+    ("quadrant_reasoning", "TEXT"),
+    ("quadrant_source", "TEXT"),
+    ("quadrant_classified_at", "TEXT"),
+]
+
+
+def migrate_inbox_quadrant_columns() -> None:
+    conn = get_conn()
+    for col, col_type in _QUADRANT_COLUMNS:
+        try:
+            conn.execute(f"ALTER TABLE inbox_items ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+    conn.commit()
+    conn.close()
+
+
+VALID_QUADRANTS = {"q1", "q2", "q3", "q4"}
+
+_QUADRANT_SORT_SQL = """
+    CASE quadrant
+        WHEN 'q1' THEN 0
+        WHEN 'q2' THEN 1
+        WHEN 'q3' THEN 2
+        WHEN 'q4' THEN 3
+        ELSE 4
+    END,
+    created_at DESC
+"""
 
 
 # ── Inbox ──────────────────────────────────────────────
@@ -162,7 +197,10 @@ def list_inbox(status: str | None = None, limit: int = 50) -> list[dict]:
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT * FROM inbox_items WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ?",
+            f"""SELECT * FROM inbox_items
+                WHERE archived_at IS NULL
+                ORDER BY {_QUADRANT_SORT_SQL}
+                LIMIT ?""",
             (limit,),
         ).fetchall()
     conn.close()
@@ -209,6 +247,62 @@ def set_inbox_clarified(item_id: int, clarify_result: dict) -> None:
            SET status = 'clarified', clarify_result_json = ?, clarified_at = datetime('now', 'localtime')
            WHERE id = ?""",
         (json.dumps(clarify_result, ensure_ascii=False), item_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_inbox_quadrant_classifying(item_id: int) -> None:
+    conn = get_conn()
+    conn.execute(
+        "UPDATE inbox_items SET quadrant_status = 'classifying' WHERE id = ?",
+        (item_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_inbox_quadrant_classified(
+    item_id: int, quadrant: str, reasoning: str, source: str = "ai"
+) -> None:
+    if quadrant not in VALID_QUADRANTS:
+        raise ValueError(f"invalid quadrant: {quadrant}")
+    conn = get_conn()
+    conn.execute(
+        """UPDATE inbox_items
+           SET quadrant = ?, quadrant_status = 'classified',
+               quadrant_reasoning = ?, quadrant_source = ?,
+               quadrant_classified_at = datetime('now', 'localtime')
+           WHERE id = ?""",
+        (quadrant, reasoning, source, item_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_inbox_quadrant_failed(item_id: int) -> None:
+    conn = get_conn()
+    conn.execute(
+        """UPDATE inbox_items
+           SET quadrant = NULL, quadrant_status = 'failed'
+           WHERE id = ?""",
+        (item_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_inbox_quadrant_user(item_id: int, quadrant: str) -> None:
+    if quadrant not in VALID_QUADRANTS:
+        raise ValueError(f"invalid quadrant: {quadrant}")
+    conn = get_conn()
+    conn.execute(
+        """UPDATE inbox_items
+           SET quadrant = ?, quadrant_status = 'classified',
+               quadrant_source = 'user',
+               quadrant_classified_at = datetime('now', 'localtime')
+           WHERE id = ?""",
+        (quadrant, item_id),
     )
     conn.commit()
     conn.close()
