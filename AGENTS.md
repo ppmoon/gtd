@@ -20,3 +20,17 @@ Dependencies are installed into a virtualenv at `.venv` by the startup update sc
 - **SQLite DB** lives at `data/gtd.db` (auto-created, WAL mode, gitignored). Delete the `data/` dir to reset all state, then restart the server.
 - **No linter is configured** in this repo. Tests run with `.venv/bin/pytest` (see `tests/`).
 - The clarify **confirm** step (`/api/clarify/{id}/confirm`) creates the target entity but marks the inbox item `clarified` without archiving it; the manual **route** step (`/api/inbox/{id}/route`) both creates the entity and archives the inbox item.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `ppmoon/gtd`; external PRs are also a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
